@@ -414,27 +414,12 @@ public class Controller implements Runnable {
                         // If total arrival rate  is equal, lowest consumer id first
                         return c1.getKey().compareTo(c2.getKey());
                     }).getKey();
-            //we currently have the the consumer with the lowest lag
-/*            System.out.println("Assigning the consumer {} with the lowest ArrivalRate {} to the partition with the highest ArrivalRate {} "+
-                    memberId + "  " + consumerTotalArrivalRate.get(memberId) + " " + partition.getArrivalRate());*/
-
-
 
             assignment.get(memberId).assignPartition(partition);
             consumerTotalArrivalRate.put(memberId, consumerTotalArrivalRate.getOrDefault(memberId, 0.0) + partition.getArrivalRate());
             consumerTotalPartitions.put(memberId, consumerTotalPartitions.getOrDefault(memberId, 0) + 1);
             consumerRemainingAllowableArrivalRate.put(memberId, consumerAllowableArrivalRate.get(memberId)
                     - consumerTotalArrivalRate.get(memberId));
-           /* System.out.println("The remaining allowable arrival rate for consumer {} is {} " +
-                    memberId + " " + (consumerAllowableArrivalRate.get(memberId) - consumerTotalArrivalRate.get(memberId)));*/
-
-//            System.out.println(
-//                    "Assigned partition {}-{} to consumer {}.  partition_arrival_rate={}, consumer_current_total_arrival_rate{} " +
-//                            " " + partition.getId() +
-//                            " " + memberId +
-//                            " " + partition.getArrivalRate() +
-//                            " " + consumerTotalArrivalRate.get(memberId));
-
             log.info(
                     "Assigned partition {} to consumer {}.  partition_arrival_rate={}, consumer_current_total_arrival_rate{} ",
                     partition.getId(),
