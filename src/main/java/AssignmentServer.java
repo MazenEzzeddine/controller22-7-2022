@@ -36,9 +36,9 @@ public class AssignmentServer implements Runnable{
             @Override
             public void run() {
                 // Use stderr here since the logger may has been reset by its JVM shutdown hook.
-                System.err.println("*** shutting down gRPC server since JVM is shutting down");
+                log.info("*** shutting down gRPC server since JVM is shutting down");
                 AssignmentServer.this.stop();
-                System.err.println("*** server shut down");
+                log.info("*** server shut down");
             }
         });
     }
