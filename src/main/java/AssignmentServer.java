@@ -14,9 +14,7 @@ public class AssignmentServer implements Runnable{
 
     private final int port;
     private final Server server;
-
     private static final Logger log = LogManager.getLogger(AssignmentServer.class);
-
 
     public AssignmentServer(int port) throws IOException {
         this(ServerBuilder.forPort(port), port);
@@ -28,8 +26,6 @@ public class AssignmentServer implements Runnable{
     }
 
     public void start() throws IOException {
-
-
         log.info("Server Started");
         server.start();
         Runtime.getRuntime().addShutdownHook(new Thread() {
@@ -57,7 +53,6 @@ public class AssignmentServer implements Runnable{
 
     @Override
     public void run() {
-
         try {
             start();
             blockUntilShutdown();
@@ -70,12 +65,10 @@ public class AssignmentServer implements Runnable{
     public static class AssignmentService extends AssignmentServiceGrpc.AssignmentServiceImplBase {
         @Override
         public void getAssignment(AssignmentRequest request, StreamObserver<AssignmentResponse> responseObserver) {
-
            log.info(request.getRequest());
            //TODO Synchronize access to assignment
             List<Consumer> assignment = Controller.assignment;
             log.info("The assignment is {}", assignment);
-
             List<ConsumerGrpc> assignmentReply = new ArrayList<>(assignment.size());
 
             for (Consumer cons : assignment) {
@@ -89,13 +82,6 @@ public class AssignmentServer implements Runnable{
                 assignmentReply.add(consg);
             }
 
-          /*  for(ConsumerGrpc cons : assignmentReply){
-                log.info("Consumer {} has the following partitions", cons.getId());
-                for(PartitionGrpc part : cons.getAssignedPartitionsList()){
-                    log.info("partition {}", part.getId());
-                }
-
-            }*/
             responseObserver.onNext(AssignmentResponse.newBuilder().addAllConsumers(assignmentReply).build());
             responseObserver.onCompleted();
             log.info("Sent Assignment to client");

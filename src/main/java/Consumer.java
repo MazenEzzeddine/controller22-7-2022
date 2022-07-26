@@ -42,10 +42,10 @@ public class Consumer {
     @Override
     public String toString() {
         return "\nConsumer{" + "id=" + id +
-                ",  lagCapacity=" + lagCapacity +
-                ", remainingArrivalCapacity=" + String.format("%.2f", remainingArrivalCapacity) +
-                ", arrivalCapacity=" + String.format("%.2f", arrivalCapacity) +
-                ", remainingLagCapacity=" + remainingLagCapacity +
+                ",  lagCapacity= " + lagCapacity +
+                ", remainingArrivalCapacity= " + String.format("%.2f", remainingArrivalCapacity) +
+                ", arrivalCapacity= " + String.format("%.2f", arrivalCapacity) +
+                ", remainingLagCapacity= " + remainingLagCapacity +
                 ", assignedPartitions= \n" + assignedPartitions +
                 "}";
     }

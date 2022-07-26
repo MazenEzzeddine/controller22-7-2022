@@ -135,7 +135,7 @@ public class Controller implements Runnable {
                 admin.listOffsets(requestTimestampOffsets2).all().get();
 
 
-        long totalArrivalRate = 0;
+        double totalArrivalRate = 0;
         double currentPartitionArrivalRate;
         Map<Integer, Double> previousPartitionArrivalRate = new HashMap<>();
         for (TopicPartitionInfo p : td.partitions()) {
@@ -146,6 +146,10 @@ public class Controller implements Runnable {
             long latestOffset = latestOffsets.get(t).offset();
             long timeoffset1 = timestampOffsets1.get(t).offset();
             long timeoffset2 = timestampOffsets2.get(t).offset();
+            long timestampoffset1 = timestampOffsets1.get(t).timestamp();
+            long timestampoffset2 = timestampOffsets2.get(t).timestamp();
+
+
             long committedoffset = committedOffsets.get(t).offset();
             partitions.get(p.partition()).setLag(latestOffset - committedoffset);
             //TODO if abs(currentPartitionArrivalRate -  previousPartitionArrivalRate) > 15
@@ -165,7 +169,9 @@ public class Controller implements Runnable {
                         partitions.get(p.partition()).getLag());
                 log.info(partitions.get(p.partition()));
             } else {
-                currentPartitionArrivalRate = (double) (timeoffset2 - timeoffset1) / doublesleep;
+               // currentPartitionArrivalRate = (double) (timeoffset2 - timeoffset1) / doublesleep;
+                log.info("(timestampoffset2-timestampoffset1) {}", (timestampoffset2-timestampoffset1));
+                currentPartitionArrivalRate = (double) (timeoffset2 - timeoffset1) / ((timestampoffset2-timestampoffset1)/1000.0);
                  //if(currentPartitionArrivalRate==0) continue;
                 //TODO only update currentPartitionArrivalRate if (currentPartitionArrivalRate - previousPartitionArrivalRate) < 10 or threshold
                 // currentPartitionArrivalRate = previousPartitionArrivalRate.get(p.partition());
