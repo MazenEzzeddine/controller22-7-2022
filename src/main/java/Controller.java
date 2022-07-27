@@ -45,6 +45,8 @@ public class Controller implements Runnable {
     static Instant lastScaleUpDecision;
     static Instant lastScaleDownDecision;
     static Instant lastCGQuery;
+    static  double previousTotalArrivalRate;
+
 
 
 
@@ -114,7 +116,6 @@ public class Controller implements Runnable {
     private static void getCommittedLatestOffsetsAndLag() throws ExecutionException, InterruptedException {
         committedOffsets = admin.listConsumerGroupOffsets(CONSUMER_GROUP)
                 .partitionsToOffsetAndMetadata().get();
-
         Map<TopicPartition, OffsetSpec> requestLatestOffsets = new HashMap<>();
         Map<TopicPartition, OffsetSpec> requestTimestampOffsets1 = new HashMap<>();
         Map<TopicPartition, OffsetSpec> requestTimestampOffsets2 = new HashMap<>();
@@ -126,7 +127,6 @@ public class Controller implements Runnable {
             requestTimestampOffsets1.put(new TopicPartition(topic, p.partition()),
                     OffsetSpec.forTimestamp(Instant.now().minusMillis(sleep + 1500).toEpochMilli()));
         }
-
         Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> latestOffsets =
                 admin.listOffsets(requestLatestOffsets).all().get();
         Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> timestampOffsets1 =
@@ -134,8 +134,8 @@ public class Controller implements Runnable {
         Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> timestampOffsets2 =
                 admin.listOffsets(requestTimestampOffsets2).all().get();
 
-
         double totalArrivalRate = 0;
+        boolean timingFlag= false;
         double currentPartitionArrivalRate;
         Map<Integer, Double> previousPartitionArrivalRate = new HashMap<>();
         for (TopicPartitionInfo p : td.partitions()) {
@@ -148,17 +148,17 @@ public class Controller implements Runnable {
             long timeoffset2 = timestampOffsets2.get(t).offset();
             long timestampoffset1 = timestampOffsets1.get(t).timestamp();
             long timestampoffset2 = timestampOffsets2.get(t).timestamp();
-
-
             long committedoffset = committedOffsets.get(t).offset();
             partitions.get(p.partition()).setLag(latestOffset - committedoffset);
             //TODO if abs(currentPartitionArrivalRate -  previousPartitionArrivalRate) > 15
             //TODO currentPartitionArrivalRate= previousPartitionArrivalRate;
-            if(timeoffset2==timeoffset1)
+            if(timeoffset2==timeoffset1) {
+                //timingFlag= true;
                 break;
-
+            }
             if (timeoffset2 == -1) {
                 timeoffset2 = latestOffset;
+
             }
             if (timeoffset1 == -1) {
                 // NOT very critical condition
@@ -187,21 +187,21 @@ public class Controller implements Runnable {
             //TODO add a condition for when both offsets timeoffset2 and timeoffset1 do not exist, i.e., are -1,
             previousPartitionArrivalRate.put(p.partition(), currentPartitionArrivalRate);
             totalArrivalRate += currentPartitionArrivalRate;
+
         }
         //report total arrival only if not zero only the loop has not exited.
+/*        if(!timingFlag) {
+             previousTotalArrivalRate = totalArrivalRate;
+        } else {
+            totalArrivalRate = previousTotalArrivalRate;
+        }*/
         log.info("totalArrivalRate {}", totalArrivalRate);
-
-
          // attention not to have this CG querying interval less than cooldown interval
         if (Duration.between(lastCGQuery, Instant.now()).toSeconds() >= 30) {
             queryConsumerGroup();
-            lastCGQuery = Instant.now();
-        }
+            lastCGQuery = Instant.now();}
         youMightWanttoScaleUsingBinPack();
     }
-
-
-
 
 
 
@@ -214,7 +214,6 @@ public class Controller implements Runnable {
             log.info("Scale  cooldown period has not elapsed yet not taking decisions");
         }
     }
-
 
     public static void scaleAsPerBinPack(int currentsize) {
 
@@ -262,7 +261,6 @@ public class Controller implements Runnable {
         log.info("Inside binPackAndScale ");
         List<Consumer> consumers = new ArrayList<>();
         int consumerCount = 0;
-
         List<Partition> parts = new ArrayList<>(partitions);
         dynamicAverageMaxConsumptionRate = 95.0;
 
@@ -290,10 +288,8 @@ public class Controller implements Runnable {
                 partition.setArrivalRate(dynamicAverageMaxConsumptionRate);
             }
         }
-
         //start the bin pack FFD with sort
         Collections.sort(parts, Collections.reverseOrder());
-
         Consumer consumer = null;
         for (Partition partition : parts) {
             for (Consumer cons : consumers) {
@@ -320,9 +316,7 @@ public class Controller implements Runnable {
                 consumer = null;
             }
         }
-
         log.info(" The BP scaler recommended {}", consumers.size());
-
         // copy consumers and partitions for fair assignment
         List<Consumer> fairconsumers = new ArrayList<>(consumers.size());
         List<Partition> fairpartitions= new ArrayList<>();
@@ -346,18 +340,12 @@ public class Controller implements Runnable {
         //2. list of consumers out of the bin pack.
         //3. the partition sorted in their decreasing arrival rate.
         assignPartitionsFairly(fairconsumers,consumers,fairpartitions);
-
-
-
-
-
         for (Consumer cons : fairconsumers) {
             log.info("fair consumer {} is assigned the following partitions", cons.getId() );
             for(Partition p : cons.getAssignedPartitions()) {
                 log.info("fair Partition {}", p.getId());
             }
         }
-
         assignment = fairconsumers;
         return consumers.size();
     }
@@ -375,19 +363,15 @@ public class Controller implements Runnable {
         final Map<Integer, Integer> consumerTotalPartitions = new HashMap<>(consumers.size());
         final Map<Integer, Double> consumerRemainingAllowableArrivalRate = new HashMap<>(consumers.size());
         final Map<Integer, Double> consumerAllowableArrivalRate = new HashMap<>(consumers.size());
-
-
         for (Consumer cons : consumers) {
             consumerTotalArrivalRate.put(cons.getId(), 0.0);
             consumerAllowableArrivalRate.put(cons.getId(), 95.0);
         }
-
         // Track total number of partitions assigned to each consumer (for the current topic)
         for (Consumer cons : consumers) {
             consumerTotalPartitions.put(cons.getId(), 0);
             consumerRemainingAllowableArrivalRate.put(cons.getId(), consumerAllowableArrivalRate.get(cons.getId()));
         }
-
         // might want to remove, the partitions are sorted anyway.
         //First fit decreasing
         partitionsArrivalRate.sort((p1, p2) -> {
@@ -409,9 +393,9 @@ public class Controller implements Runnable {
                         //lowest number of partitions first.
                         final int comparePartitionCount = Integer.compare(consumerTotalPartitions.get(c1.getKey()),
                                 consumerTotalPartitions.get(c2.getKey()));
-                        if (comparePartitionCount != 0) {
+                       /* if (comparePartitionCount != 0) {
                             return comparePartitionCount;
-                        }
+                        }*/
                         // If partition count is equal, lowest total lag first, get the consumer with the lowest arrival rate
                         final int compareTotalLags = Double.compare(c1.getValue(), c2.getValue());
                         if (compareTotalLags != 0) {
