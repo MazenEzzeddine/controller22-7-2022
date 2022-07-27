@@ -45,10 +45,7 @@ public class Controller implements Runnable {
     static Instant lastScaleUpDecision;
     static Instant lastScaleDownDecision;
     static Instant lastCGQuery;
-    static  double previousTotalArrivalRate;
-
-
-
+    static Integer cooldown;
 
 
     private static void readEnvAndCrateAdminClient() throws ExecutionException, InterruptedException {
@@ -58,6 +55,8 @@ public class Controller implements Runnable {
         poll = Long.valueOf(System.getenv("POLL"));
         CONSUMER_GROUP = System.getenv("CONSUMER_GROUP");
         BOOTSTRAP_SERVERS = System.getenv("BOOTSTRAP_SERVERS");
+        cooldown = Integer.parseInt(System.getenv("COOLDOWN"));
+
         Properties props = new Properties();
         props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, BOOTSTRAP_SERVERS);
         admin = AdminClient.create(props);
@@ -135,7 +134,6 @@ public class Controller implements Runnable {
                 admin.listOffsets(requestTimestampOffsets2).all().get();
 
         double totalArrivalRate = 0;
-        boolean timingFlag= false;
         double currentPartitionArrivalRate;
         Map<Integer, Double> previousPartitionArrivalRate = new HashMap<>();
         for (TopicPartitionInfo p : td.partitions()) {
@@ -153,7 +151,6 @@ public class Controller implements Runnable {
             //TODO if abs(currentPartitionArrivalRate -  previousPartitionArrivalRate) > 15
             //TODO currentPartitionArrivalRate= previousPartitionArrivalRate;
             if(timeoffset2==timeoffset1) {
-                //timingFlag= true;
                 break;
             }
             if (timeoffset2 == -1) {
@@ -178,7 +175,7 @@ public class Controller implements Runnable {
                 //TODO break
                 partitions.get(p.partition()).setArrivalRate(currentPartitionArrivalRate);
                 log.info(" Arrival rate into partition {} is {}", t.partition(),
-                        partitions.get(p.partition()).getArrivalRate());
+                        String.format("%.2f", partitions.get(p.partition()).getArrivalRate())) ;
 
                 log.info(" lag of  partition {} is {}", t.partition(),
                         partitions.get(p.partition()).getLag());
@@ -189,15 +186,9 @@ public class Controller implements Runnable {
             totalArrivalRate += currentPartitionArrivalRate;
 
         }
-        //report total arrival only if not zero only the loop has not exited.
-/*        if(!timingFlag) {
-             previousTotalArrivalRate = totalArrivalRate;
-        } else {
-            totalArrivalRate = previousTotalArrivalRate;
-        }*/
-        log.info("totalArrivalRate {}", totalArrivalRate);
+        log.info("totalArrivalRate {}",  String.format("%.2f", totalArrivalRate ));
          // attention not to have this CG querying interval less than cooldown interval
-        if (Duration.between(lastCGQuery, Instant.now()).toSeconds() >= 30) {
+        if (Duration.between(lastCGQuery, Instant.now()).toSeconds() >= cooldown) {
             queryConsumerGroup();
             lastCGQuery = Instant.now();}
         youMightWanttoScaleUsingBinPack();
@@ -208,7 +199,7 @@ public class Controller implements Runnable {
     private static void youMightWanttoScaleUsingBinPack() {
         log.info("Calling the bin pack scaler");
         int size = consumerGroupDescriptionMap.get(Controller.CONSUMER_GROUP).members().size();
-        if(Duration.between(lastScaleUpDecision, Instant.now()).toSeconds() >= 30) {
+        if(Duration.between(lastScaleUpDecision, Instant.now()).toSeconds() >= cooldown) {
             scaleAsPerBinPack(size);
         } else {
             log.info("Scale  cooldown period has not elapsed yet not taking decisions");
@@ -393,9 +384,7 @@ public class Controller implements Runnable {
                         //lowest number of partitions first.
                         final int comparePartitionCount = Integer.compare(consumerTotalPartitions.get(c1.getKey()),
                                 consumerTotalPartitions.get(c2.getKey()));
-                       /* if (comparePartitionCount != 0) {
-                            return comparePartitionCount;
-                        }*/
+
                         // If partition count is equal, lowest total lag first, get the consumer with the lowest arrival rate
                         final int compareTotalLags = Double.compare(c1.getValue(), c2.getValue());
                         if (compareTotalLags != 0) {
@@ -438,11 +427,13 @@ public class Controller implements Runnable {
         }
         while (true) {
             log.info("New Iteration:");
+
             try {
                 getCommittedLatestOffsetsAndLag();
             } catch (ExecutionException | InterruptedException e) {
                 e.printStackTrace();
             }
+
             log.info("Sleeping for {} seconds", sleep / 1000.0);
             log.info("End Iteration;");
             log.info("============================================");
@@ -453,6 +444,11 @@ public class Controller implements Runnable {
             }
         }
     }
+
+
+
+
+
 }
 
 
